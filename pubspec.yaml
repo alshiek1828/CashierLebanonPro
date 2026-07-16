@@ -18,7 +18,7 @@ dependencies:
   # Navigation
   go_router: ^13.2.0
 
-  # Database - Using sqflite instead of drift for simplicity
+  # Database
   sqflite: ^2.3.2
   path: ^1.9.0
   path_provider: ^2.1.2
@@ -58,15 +58,15 @@ flutter:
   uses-material-design: true
   generate: true
   
-  assets:
-    - assets/images/
-    - assets/icons/
+  # assets:
+  #   - assets/images/
+  #   - assets/icons/
 
-  fonts:
-    - family: Cairo
-      fonts:
-        - asset: assets/fonts/Cairo-Regular.ttf
-        - asset: assets/fonts/Cairo-Bold.ttf
-          weight: 700
-        - asset: assets/fonts/Cairo-Light.ttf
-          weight: 300
+  # fonts:
+  #   - family: Cairo
+  #     fonts:
+  #       - asset: assets/fonts/Cairo-Regular.ttf
+  #       - asset: assets/fonts/Cairo-Bold.ttf
+  #         weight: 700
+  #       - asset: assets/fonts/Cairo-Light.ttf
+  #         weight: 300
