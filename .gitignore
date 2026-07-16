@@ -72,10 +72,9 @@ app.*.map.json
 # Coverage
 coverage/
 
-# Generated files
-lib/**/*.g.dart
+# Generated files (except database)
 lib/**/*.freezed.dart
-lib/data/database/app_database.g.dart
+!lib/data/database/app_database.g.dart
 
 # Secrets and sensitive data (DO NOT COMMIT)
 .env
