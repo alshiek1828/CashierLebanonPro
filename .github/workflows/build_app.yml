@@ -29,7 +29,10 @@ jobs:
           channel: 'stable'
           cache: true
           
-      - run: flutter pub get
+      - name: Install Dependencies
+        run: |
+          flutter pub get
+          dart run build_runner build --delete-conflicting-outputs || true
         
       - run: flutter build apk --release --debug
         
@@ -54,7 +57,10 @@ jobs:
           channel: 'stable'
           cache: true
           
-      - run: flutter pub get
+      - name: Install Dependencies
+        run: |
+          flutter pub get
+          dart run build_runner build --delete-conflicting-outputs || true
         
       - run: pod install
         working-directory: ios
@@ -76,7 +82,10 @@ jobs:
           channel: 'stable'
           cache: true
           
-      - run: flutter pub get
+      - name: Install Dependencies
+        run: |
+          flutter pub get
+          dart run build_runner build --delete-conflicting-outputs || true
         
       - run: flutter build web --release
         
