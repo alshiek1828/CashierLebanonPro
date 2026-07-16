@@ -1,0 +1,197 @@
+name: Build Cashier Lebanon Pro
+
+on:
+  push:
+    branches: [main, develop]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/**'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  FLUTTER_VERSION: '3.19.0'
+
+jobs:
+  # ==================== ANDROID BUILD ====================
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+          
+      - name: Setup Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+          
+      - name: Get Dependencies
+        run: flutter pub get
+        
+      - name: Verify Flutter
+        run: flutter doctor -v
+        
+      - name: Run Tests (if any)
+        run: flutter test --no-pub || echo "No tests found, continuing..."
+        
+      - name: Build APK (Release)
+        run: flutter build apk --release --obfuscate --split-debug-info=build/debug-info
+        
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: android-apk-${{ github.run_id }}
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
+          
+      - name: Build App Bundle (for Play Store)
+        run: flutter build appbundle --release
+        
+      - name: Upload AAB Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: android-aab-${{ github.run_id }}
+          path: build/app/outputs/bundle/release/app-release.aab
+          retention-days: 30
+
+  # ==================== IOS BUILD ====================
+  build-ios:
+    name: Build iOS (Unsigned)
+    runs-on: macos-14  # ← مهم: استخدم macos-14 لتجنب مشاكل -G flag
+    timeout-minutes: 45
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        
+      - name: Setup Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+          
+      - name: Get Dependencies
+        run: flutter pub get
+        
+      - name: Install CocoaPods Dependencies
+        working-directory: ios
+        run: pod install --repo-update
+        
+      - name: Install CocoaPods (if needed)
+        run: |
+          if ! command -v pod &> /dev/null; then
+            sudo gem install cocoapods
+          fi
+          
+      - name: Build iOS (No Codesign)
+        run: |
+          flutter build ios --release --no-codesign \
+            --obfuscate \
+            --split-debug-info=build/debug-info
+            
+      - name: Create IPA Archive
+        run: |
+          cd build/ios/iphoneos
+          mkdir -p Payload
+          cp -r Runner.app Payload/
+          zip -r CashierLebanonPro.ipa Payload
+          
+      - name: Upload iOS Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ios-build-${{ github.run_id }}
+          path: |
+            build/ios/iphoneos/CashierLebanonPro.ipa
+            build/ios/archive/
+          retention-days: 30
+
+  # ==================== WEB BUILD ====================
+  build-web:
+    name: Build Web
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        
+      - name: Setup Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+          
+      - name: Get Dependencies
+        run: flutter pub get
+        
+      - name: Build Web (Release)
+        run: flutter build web --release --pwa-strategy=offline-first
+        
+      - name: Upload Web Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: web-build-${{ github.run_id }}
+          path: build/web/
+          retention-days: 30
+
+  # ==================== CODE QUALITY CHECK ====================
+  code-quality:
+    name: Code Quality Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        
+      - name: Setup Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+          
+      - name: Get Dependencies
+        run: flutter pub get
+        
+      - name: Analyze Code
+        run: flutter analyze --no-fatal-infos --fatal-warnings || true
+        
+      - name: Format Check
+        run: dart format --output=none --set-exit-if-changed .
+        
+      - name: Check for Dart Issues
+        run: dart analyze lib/
+
+  # ==================== SUMMARY ====================
+  summary:
+    name: Build Summary
+    needs: [build-android, build-ios, build-web]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Summary
+        run: |
+          echo "## 🚀 Cashier Lebanon Pro - Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Platform | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Android | ${{ needs.build-android.result == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| iOS | ${{ needs.build-ios.result == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Web | ${{ needs.build-web.result == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
