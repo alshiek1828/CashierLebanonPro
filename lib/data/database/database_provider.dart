@@ -3,117 +3,79 @@ import 'app_database.dart';
 
 // Database Provider
 final databaseProvider = Provider<AppDatabase>((ref) {
-  final db = AppDatabase();
-  ref.onDispose(() => db.close());
-  return db;
+  return AppDatabase();
 });
 
 // Products Repository Provider
 final productsRepositoryProvider = Provider<ProductsRepository>((ref) {
-  final db = ref.watch(databaseProvider);
-  return ProductsRepository(db);
+  return ProductsRepository();
 });
 
 // Invoices Repository Provider
 final invoicesRepositoryProvider = Provider<InvoicesRepository>((ref) {
-  final db = ref.watch(databaseProvider);
-  return InvoicesRepository(db);
+  return InvoicesRepository();
 });
 
 // Settings Repository Provider
 final settingsRepositoryProvider = Provider<SettingsRepository>((ref) {
-  final db = ref.watch(databaseProvider);
-  return SettingsRepository(db);
+  return SettingsRepository();
 });
 
 // ==================== PRODUCTS REPOSITORY ====================
 
 class ProductsRepository {
-  final AppDatabase _db;
   
-  ProductsRepository(this._db);
-
-  Future<List<Product>> getAll() => _db.getAllProducts();
+  Future<List<Map<String, dynamic>>> getAll() => AppDatabase.getAllProducts();
   
-  Future<List<Product>> getActive() => _db.getActiveProducts();
+  Future<List<Map<String, dynamic>>> search(String query) => AppDatabase.searchProducts(query);
   
-  Future<Product?> getById(int id) => _db.getProductById(id);
+  Future<Map<String, dynamic>?> getById(int id) => AppDatabase.getProductById(id);
   
-  Future<Product?> getByBarcode(String barcode) => _db.getProductByBarcode(barcode);
+  Future<Map<String, dynamic>?> getByBarcode(String barcode) => AppDatabase.getProductByBarcode(barcode);
   
-  Future<List<Product>> search(String query) => _db.searchProducts(query);
+  Future<int> create(Map<String, dynamic> product) => AppDatabase.insertProduct(product);
   
-  Future<int> create(ProductsCompanion product) => _db.insertProduct(product);
-  
-  Future<bool> update(ProductsCompanion product) => _db.updateProduct(product);
+  Future<int> update(Map<String, dynamic> product) => AppDatabase.updateProduct(product);
   
   Future<bool> delete(int id) async {
-    // Also delete related stock movements
-    await _db.customSelect(
-      'DELETE FROM stock_movements WHERE product_id = ?',
-      variables: [Variable.withInt(id)],
-    ).go();
-    return (await _db.deleteProduct(id)) > 0;
+    final result = await AppDatabase.deleteProduct(id);
+    return result > 0;
   }
-  
-  Future<List<String>> getCategories() => _db.getAllCategories();
-  
-  Future<List<Product>> getByCategory(String category) => _db.getProductsByCategory(category);
 }
 
 // ==================== INVOICES REPOSITORY ====================
 
 class InvoicesRepository {
-  final AppDatabase _db;
   
-  InvoicesRepository(this._db);
-
-  Future<List<Invoice>> getAll() => _db.getAllInvoices();
+  Future<List<Map<String, dynamic>>> getAll() => AppDatabase.getAllInvoices();
   
-  Future<Invoice?> getById(int id) => _db.getInvoiceById(id);
+  Future<Map<String, dynamic>?> getById(int id) => AppDatabase.getInvoiceById(id);
   
-  Future<Invoice?> getByNumber(String number) => _db.getInvoiceByNumber(number);
+  Future<int> create(Map<String, dynamic> invoice) => AppDatabase.insertInvoice(invoice);
   
-  Future<int> create(InvoicesCompanion invoice) => _db.insertInvoice(invoice);
-  
-  Future<bool> update(InvoicesCompanion invoice) => _db.updateInvoice(invoice);
+  Future<int> update(Map<String, dynamic> invoice) => AppDatabase.updateInvoice(invoice);
   
   Future<bool> delete(int id) async {
-    await _db.deleteInvoiceItemsByInvoiceId(id);
-    return (await _db.deleteInvoice(id)) > 0;
+    final result = await AppDatabase.deleteInvoice(id);
+    return result > 0;
   }
   
-  Future<List<InvoiceItem>> getItems(int invoiceId) => _db.getInvoiceItems(invoiceId);
+  Future<List<Map<String, dynamic>>> getItems(int invoiceId) => AppDatabase.getInvoiceItems(invoiceId);
   
-  Future<int> addItem(InvoiceItemsCompanion item) => _db.insertInvoiceItem(item);
+  Future<int> addItem(Map<String, dynamic> item) => AppDatabase.insertInvoiceItem(item);
   
-  Future<bool> updateItem(InvoiceItemsCompanion item) => _db.updateInvoiceItem(item);
-  
-  Future<void> removeItem(int id) => _db.deleteInvoiceItem(id);
-  
-  Future<void> clearItems(int invoiceId) => _db.deleteInvoiceItemsByInvoiceId(invoiceId);
-  
-  Future<String> generateNumber() => _db.generateInvoiceNumber();
-  
-  Future<double> getTotalSales(DateTime start, DateTime end) => 
-      _db.getTotalSales(start, end);
-      
-  Future<int> getCount(DateTime start, DateTime end) => 
-      _db.getInvoicesCount(start, end);
+  Future<String> generateNumber() => AppDatabase.generateInvoiceNumber();
 }
 
 // ==================== SETTINGS REPOSITORY ====================
 
 class SettingsRepository {
-  final AppDatabase _db;
   
-  SettingsRepository(this._db);
-
-  Future<String?> get(String key) => _db.getSetting(key);
+  Future<String?> get(String key) => AppDatabase.getSetting(key);
   
-  Future<void> set(String key, String value) => _db.setSetting(key, value);
+  Future<void> set(String key, String value) => AppDatabase.setSetting(key, value);
   
-  Future<Map<String, String>> getAll() => _db.getAllSettings();
+  Future<Map<String, String>> getAll() => AppDatabase.getAllSettings();
   
   // Convenience methods for common settings
   Future<String> getStoreName() async => await get('store_name') ?? 'متجري';
@@ -127,7 +89,7 @@ class SettingsRepository {
   
   Future<double> getExchangeRate() async {
     final rate = await get('exchange_rate');
-    return rate != null ? double.tryParse(rate) ?? 89500.0 : 89500.0; // Default LBP rate
+    return rate != null ? double.tryParse(rate) ?? 89500.0 : 89500.0;
   }
   Future<void> setExchangeRate(double rate) => set('exchange_rate', rate.toString());
   

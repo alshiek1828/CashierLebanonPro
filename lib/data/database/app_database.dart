@@ -1,315 +1,263 @@
 import 'dart:io';
-import 'package:drift/drift.dart';
-import 'package:drift/native.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
-import 'package:sqlite3_flutter_libs/sqlite3_flutter_libs.dart';
 
-part 'app_database.g.dart';
-
-// Products Table
-class Products extends Table {
-  IntColumn get id => integer().autoincrement()();
-  TextColumn get name => text().withLength(min: 1, max: 200)();
-  RealColumn get priceUsd => real()();
-  RealColumn get priceLbp => real()();
-  TextColumn get barcode => text().nullable()();
-  TextColumn get category => text().withDefault(const Value('عام'))();
-  IntegerColumn get stockQuantity => integer().withDefault(const Constant(0))();
-  TextColumn get imageUrl => text().nullable()();
-  TextColumn get description => text().nullable()();
-  BoolColumn get isActive => boolean().withDefault(const Constant(true))();
-  DateTimeColumn get createdAt => dateTime().withCurrentTimestamp()();
-  DateTimeColumn get updatedAt => dateTime().withCurrentTimestamp()();
-}
-
-// Invoices Table
-class Invoices extends Table {
-  IntColumn get id => integer().autoincrement()();
-  TextColumn get invoiceNumber => text()();
-  RealColumn get subtotal => real().withDefault(const Constant(0))();
-  RealColumn get discount => real().withDefault(const Constant(0))();
-  RealColumn get tax => real().withDefault(const Constant(0))();
-  RealColumn get totalUsd => real().withDefault(const Constant(0))();
-  RealColumn get totalLbp => real().withDefault(const Constant(0))();
-  TextColumn get currency => text().withDefault(const Constant('USD'))();
-  TextColumn get status => text().withDefault(const Constant('pending'))(); // pending, paid, cancelled
-  TextColumn get paymentMethod => text().nullable()(); // cash, card, mixed
-  TextColumn get customerName => text().nullable()();
-  TextColumn get customerPhone => text().nullable()();
-  TextColumn get notes => text().nullable()();
-  DateTimeColumn get createdAt => dateTime().withCurrentTimestamp()();
-  DateTimeColumn get updatedAt => dateTime().withCurrentTimestamp()();
-}
-
-// Invoice Items Table
-class InvoiceItems extends Table {
-  IntColumn get id => integer().autoincrement()();
-  IntColumn get invoiceId => integer().references(Invoices, #id)();
-  IntColumn get productId => integer().references(Products, #id).nullable()();
-  TextColumn get productName => text()();
-  RealColumn get price => real()();
-  RealColumn get quantity => real()();
-  RealColumn get total => real()();
-  TextColumn get unit => text().withDefault(const Value('piece'))();
-}
-
-// Settings Table
-class AppSettings extends Table {
-  TextColumn get key => text()();
-  TextColumn get value => text()();
+class AppDatabase {
+  static Database? _database;
   
-  @override
-  Set<Column> get primaryKey => {key};
-}
-
-// Stock Movements Table
-class StockMovements extends Table {
-  IntColumn get id => integer().autoincrement()();
-  IntColumn get productId => integer().references(Products, #id)();
-  IntegerColumn get previousQuantity => integer()();
-  IntegerColumn get newQuantity => integer()();
-  TextColumn get reason => text()();
-  TextColumn get type => text()(); // sale, purchase, adjustment, return
-  TextColumn get reference => text().nullable()(); // invoice number or adjustment id
-  DateTimeColumn get createdAt => dateTime().withCurrentTimestamp()();
-}
-
-// Categories Table (optional for future use)
-class Categories extends Table {
-  IntColumn get id => integer().autoincrement()();
-  TextColumn get name => text()();
-  TextColumn get description => text().nullable()();
-  TextColumn get color => text().nullable()();
-  BoolColumn get isActive => boolean().withDefault(const Constant(true))();
-}
-
-@DriftDatabase(tables: [
-  Products,
-  Invoices,
-  InvoiceItems,
-  AppSettings,
-  StockMovements,
-  Categories,
-])
-class AppDatabase extends _$AppDatabase {
-  AppDatabase() : super(_openConnection());
-
-  @override
-  int get schemaVersion => 1;
-
-  // Migration methods can be added here for future schema changes
-  // @override
-  // MigrationStrategy get migration {
-  //   return MigrationStrategy(
-  //     onCreate: (Migrator m) async {
-  //       await m.createAll();
-  //     },
-  //     onUpgrade: (Migrator m, int from, int to) async {
-  //       // Handle migrations here
-  //     },
-  //   );
-  // }
-
+  static Future<Database> get database async {
+    if (_database != null) return _database!;
+    _database = await initDatabase();
+    return _database!;
+  }
+  
+  static Future<Database> initDatabase() async {
+    Directory documentsDirectory = await getApplicationDocumentsDirectory();
+    String path = join(documentsDirectory.path, 'cashier_lebanon_pro.db');
+    
+    return await openDatabase(
+      path,
+      version: 1,
+      onCreate: _onCreate,
+    );
+  }
+  
+  static Future<void> _onCreate(Database db, int version) async {
+    // Products table
+    await db.execute('''
+      CREATE TABLE products(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        price_usd REAL NOT NULL,
+        price_lbp REAL NOT NULL,
+        barcode TEXT,
+        category TEXT DEFAULT 'عام',
+        stock_quantity INTEGER DEFAULT 0,
+        image_url TEXT,
+        description TEXT,
+        is_active INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    ''');
+    
+    // Invoices table
+    await db.execute('''
+      CREATE TABLE invoices(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        invoice_number TEXT NOT NULL,
+        subtotal REAL DEFAULT 0,
+        discount REAL DEFAULT 0,
+        tax REAL DEFAULT 0,
+        total_usd REAL DEFAULT 0,
+        total_lbp REAL DEFAULT 0,
+        currency TEXT DEFAULT 'USD',
+        status TEXT DEFAULT 'pending',
+        payment_method TEXT,
+        customer_name TEXT,
+        customer_phone TEXT,
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    ''');
+    
+    // Invoice items table
+    await db.execute('''
+      CREATE TABLE invoice_items(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        invoice_id INTEGER NOT NULL,
+        product_id INTEGER,
+        product_name TEXT NOT NULL,
+        price REAL NOT NULL,
+        quantity REAL NOT NULL,
+        total REAL NOT NULL,
+        unit TEXT DEFAULT 'piece',
+        FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+      )
+    ''');
+    
+    // Settings table
+    await db.execute('''
+      CREATE TABLE app_settings(
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    ''');
+    
+    // Stock movements table
+    await db.execute('''
+      CREATE TABLE stock_movements(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_id INTEGER NOT NULL,
+        previous_quantity INTEGER NOT NULL,
+        new_quantity INTEGER NOT NULL,
+        reason TEXT NOT NULL,
+        type TEXT NOT NULL,
+        reference TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    ''');
+    
+    // Categories table
+    await db.execute('''
+      CREATE TABLE categories(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        description TEXT,
+        color TEXT,
+        is_active INTEGER DEFAULT 1
+      )
+    ''');
+  }
+  
   // ==================== PRODUCTS CRUD ====================
   
-  Future<List<Product>> getAllProducts() => select(products).get();
-  
-  Future<List<Product>> getActiveProducts() =>
-      (select(products)..where((t) => t.isActive.equals(true))).get();
-  
-  Future<Product?> getProductById(int id) =>
-      (select(products)..where((t) => t.id.equals(id))).getSingleOrNull();
-  
-  Future<Product?> getProductByBarcode(String barcode) =>
-      (select(products)..where((t) => t.barcode.equals(barcode))).getSingleOrNull();
-  
-  Future<List<Product>> searchProducts(String query) {
-    final searchPattern = '%$query%';
-    return (select(products)
-      ..where((t) => t.name.like(searchPattern) | t.barcode.like(searchPattern))
-      ..orderBy([(t) => OrderingTerm.asc(t.name)])
-    ).get();
+  static Future<List<Map<String, dynamic>>> getAllProducts() async {
+    final db = await database;
+    return await db.query('products', where: 'is_active = ?', whereArgs: [1]);
   }
   
-  Future<int> insertProduct(ProductsCompanion product) => into(products).insert(product);
+  static Future<List<Map<String, dynamic>>> searchProducts(String query) async {
+    final db = await database;
+    return await db.query(
+      'products',
+      where: '(name LIKE ? OR barcode LIKE ?) AND is_active = ?',
+      whereArgs: ['%$query%', '%$$query%', 1],
+      orderBy: 'name ASC'
+    );
+  }
   
-  Future<bool> updateProduct(ProductsCompanion product) => update(products).replace(product);
+  static Future<Map<String, dynamic>?> getProductById(int id) async {
+    final db = await database;
+    final results = await db.query('products', where: 'id = ?', whereArgs: [id], limit: 1);
+    return results.isNotEmpty ? results.first : null;
+  }
   
-  Future<int> deleteProduct(int id) => (delete(products)..where((t) => t.id.equals(id))).go();
+  static Future<Map<String, dynamic>?> getProductByBarcode(String barcode) async {
+    final db = await database;
+    final results = await db.query('products', where: 'barcode = ?', whereArgs: [barcode], limit: 1);
+    return results.isNotEmpty ? results.first : null;
+  }
   
-  Future<List<Product>> getProductsByCategory(String category) =>
-      (select(products)..where((t) => t.category.equals(category))).get();
+  static Future<int> insertProduct(Map<String, dynamic> product) async {
+    final db = await database;
+    return await db.insert('products', product);
+  }
   
-  Future<List<String>> getAllCategories() =>
-      customSelect('SELECT DISTINCT category FROM products WHERE is_active = 1 ORDER BY category')
-          .map((row) => row.read<String>('category'))
-          .get();
-
+  static Future<int> updateProduct(Map<String, dynamic> product) async {
+    final db = await database;
+    return await db.update('products', product, where: 'id = ?', whereArgs: [product['id']]);
+  }
+  
+  static Future<int> deleteProduct(int id) async {
+    final db = await database;
+    return await db.delete('products', where: 'id = ?', whereArgs: [id]);
+  }
+  
   // ==================== INVOICES CRUD ====================
   
-  Future<List<Invoice>> getAllInvoices() =>
-      (select(invoices)..orderBy([(t) => OrderingTerm.desc(t.createdAt)])).get();
-  
-  Future<List<Invoice>> getInvoicesByStatus(String status) =>
-      (select(invoices)..where((t) => t.status.equals(status))).get();
-  
-  Future<Invoice?> getInvoiceById(int id) =>
-      (select(invoices)..where((t) => t.id.equals(id))).getSingleOrNull();
-  
-  Future<Invoice?> getInvoiceByNumber(String number) =>
-      (select(invoices)..where((t) => t.invoiceNumber.equals(number))).getSingleOrNull();
-  
-  Future<int> insertInvoice(InvoicesCompanion invoice) => into(invoices).insert(invoice);
-  
-  Future<bool> updateInvoice(InvoicesCompanion invoice) => update(invoices).replace(invoice);
-  
-  Future<int> deleteInvoice(int id) => (delete(invoices)..where((t) => t.id.equals(id))).go();
-  
-  Future<List<Invoice>> getInvoicesByDateRange(DateTime start, DateTime end) {
-    return (select(invoices)
-      ..where((t) => t.createdAt.isBetweenValues(start, end))
-      ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
-    ).get();
+  static Future<List<Map<String, dynamic>>> getAllInvoices() async {
+    final db = await database;
+    return await db.query('invoices', orderBy: 'created_at DESC');
   }
   
-  Future<double> getTotalSales(DateTime start, DateTime end) async {
-    final result = customSelect(
-      'SELECT COALESCE(SUM(total_usd), 0) as total FROM invoices WHERE status = ? AND created_at BETWEEN ? AND ?',
-      variables: [
-        Variable.withString('paid'),
-        Variable.withDateTime(start),
-        Variable.withDateTime(end),
-      ],
-    ).getSingle();
-    return result.read<double>('total');
+  static Future<Map<String, dynamic>?> getInvoiceById(int id) async {
+    final db = await database;
+    final results = await db.query('invoices', where: 'id = ?', whereArgs: [id], limit: 1);
+    return results.isNotEmpty ? results.first : null;
   }
   
-  Future<int> getInvoicesCount(DateTime start, DateTime end) async {
-    final result = customSelect(
-      'SELECT COUNT(*) as count FROM invoices WHERE status = ? AND created_at BETWEEN ? AND ?',
-      variables: [
-        Variable.withString('paid'),
-        Variable.withDateTime(start),
-        Variable.withDateTime(end),
-      ],
-    ).getSingle();
-    return result.read<int>('count');
-  }
-
-  // ==================== INVOICE ITEMS CRUD ====================
-  
-  Future<List<InvoiceItem>> getInvoiceItems(int invoiceId) =>
-      (select(invoiceItems)..where((t) => t.invoiceId.equals(invoiceId))).get();
-  
-  Future<int> insertInvoiceItem(InvoiceItemsCompanion item) => into(invoiceItems).insert(item);
-  
-  Future<bool> updateInvoiceItem(InvoiceItemsCompanion item) => update(invoiceItems).replace(item);
-  
-  Future<int> deleteInvoiceItem(int id) => (delete(invoiceItems)..where((t) => t.id.equals(id))).go();
-  
-  Future<int> deleteInvoiceItemsByInvoiceId(int invoiceId) =>
-      (delete(invoiceItems)..where((t) => t.invoiceId.equals(invoiceId))).go();
-
-  // ==================== SETTINGS CRUD ====================
-  
-  Future<String?> getSetting(String key) async {
-    final result = (select(appSettings)..where((t) => t.key.equals(key))).getSingleOrNull();
-    return result?.value;
+  static Future<int> insertInvoice(Map<String, dynamic> invoice) async {
+    final db = await database;
+    return await db.insert('invoices', invoice);
   }
   
-  Future<void> setSetting(String key, String value) async {
-    final existing = await getSetting(key);
-    if (existing != null) {
-      (update(appSettings)..where((t) => t.key.equals(key)))
-          .write(AppSettingsCompanion(value: Value(value)));
-    } else {
-      into(appSettings).insert(AppSettingsCompanion(key: Value(key), value: Value(value)));
-    }
+  static Future<int> updateInvoice(Map<String, dynamic> invoice) async {
+    final db = await database;
+    return await db.update('invoices', invoice, where: 'id = ?', whereArgs: [invoice['id']]);
   }
   
-  Future<Map<String, String>> getAllSettings() async {
-    final settings = await select(appSettings).get();
-    return {for (var s in settings) s.key: s.value};
-  }
-
-  // ==================== STOCK MOVEMENTS ====================
-  
-  Future<void> recordStockMovement({
-    required int productId,
-    required int previousQuantity,
-    required int newQuantity,
-    required String reason,
-    required String type,
-    String? reference,
-  }) {
-    return into(stockMovements).insert(StockMovementsCompanion(
-      productId: Value(productId),
-      previousQuantity: Value(previousQuantity),
-      newQuantity: Value(newQuantity),
-      reason: Value(reason),
-      type: Value(type),
-      reference: Value(reference),
-    ));
+  static Future<int> deleteInvoice(int id) async {
+    final db = await database;
+    await db.delete('invoice_items', where: 'invoice_id = ?', whereArgs: [id]);
+    return await db.delete('invoices', where: 'id = ?', whereArgs: [id]);
   }
   
-  Future<List<StockMovement>> getProductStockHistory(int productId) =>
-      (select(stockMovements)
-        ..where((t) => t.productId.equals(productId))
-        ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
-      ).get();
-
-  // ==================== UTILITY METHODS ====================
+  static Future<List<Map<String, dynamic>>> getInvoiceItems(int invoiceId) async {
+    final db = await database;
+    return await db.query('invoice_items', where: 'invoice_id = ?', whereArgs: [invoiceId]);
+  }
   
-  Future<String> generateInvoiceNumber() async {
-    final date = DateTime.now();
-    final prefix = 'INV-${date.year}${date.month.toString().padLeft(2, '0')}${date.day.toString().padLeft(2, '0')}';
+  static Future<int> insertInvoiceItem(Map<String, dynamic> item) async {
+    final db = await database;
+    return await db.insert('invoice_items', item);
+  }
+  
+  static Future<String> generateInvoiceNumber() async {
+    final now = DateTime.now();
+    final prefix = 'INV-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
     
-    final lastInvoice = await customSelect(
-      "SELECT invoice_number FROM invoices WHERE invoice_number LIKE '$prefix%' ORDER BY id DESC LIMIT 1",
-    ).getSingleOrNull();
+    final db = await database;
+    final result = await db.rawQuery(
+      "SELECT invoice_number FROM invoices WHERE invoice_number LIKE '$prefix%' ORDER BY id DESC LIMIT 1"
+    );
     
-    if (lastInvoice == null) {
-      return '$prefix-001';
-    }
+    if (result.isEmpty) return '$prefix-001';
     
-    final lastNumber = lastInvoice.read<String>('invoice_number');
+    final lastNumber = result.first['invoice_number'] as String;
     final sequence = int.parse(lastNumber.split('-').last);
     return '$prefix-${(sequence + 1).toString().padLeft(3, '0')}';
   }
   
-  Future<void> clearAllData() async {
-    await customSelect('DELETE FROM invoice_items').go();
-    await customSelect('DELETE FROM stock_movements').go();
-    await customSelect('DELETE FROM invoices').go();
-    await customSelect('DELETE FROM products').go();
-    await customSelect('DELETE FROM app_settings').go();
+  // ==================== SETTINGS CRUD ====================
+  
+  static Future<String?> getSetting(String key) async {
+    final db = await database;
+    final result = await db.query('app_settings', where: 'key = ?', whereArgs: [key], limit: 1);
+    return result.isNotEmpty ? result.first['value'] as String : null;
   }
   
-  Future<Map<String, dynamic>> exportDatabase() async {
-    final productsList = await getAllProducts();
-    final invoicesList = await getAllInvoices();
+  static Future<void> setSetting(String key, String value) async {
+    final db = await database;
+    final existing = await getSetting(key);
+    if (existing != null) {
+      await db.update('app_settings', {'value': value}, where: 'key = ?', whereArgs: [key]);
+    } else {
+      await db.insert('app_settings', {'key': key, 'value': value});
+    }
+  }
+  
+  static Future<Map<String, String>> getAllSettings() async {
+    final db = await database;
+    final results = await db.query('app_settings');
+    return {for (var r in results) r['key'] as String: r['value'] as String};
+  }
+  
+  // ==================== UTILITY METHODS ====================
+  
+  static Future<void> clearAllData() async {
+    final db = await database;
+    await db.delete('invoice_items');
+    await db.delete('stock_movements');
+    await db.delete('invoices');
+    await db.delete('products');
+    await db.delete('app_settings');
+  }
+  
+  static Future<Map<String, dynamic>> exportDatabase() async {
+    final db = await database;
+    final products = await getAllProducts();
+    final invoices = await getAllInvoices();
     final settings = await getAllSettings();
     
     return {
-      'products': productsList.map((p) => p.toJson()).toList(),
-      'invoices': invoicesList.map((i) => i.toJson()).toList(),
+      'products': products,
+      'invoices': invoices,
       'settings': settings,
       'exportDate': DateTime.now().toIso8601String(),
       'version': '1.0.0',
     };
   }
-}
-
-LazyDatabase _openConnection() {
-  return LazyDatabase(() async {
-    final dbFolder = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dbFolder.path, 'cashier_lebanon_pro.sqlite'));
-    
-    if (Platform.isAndroid || Platform.isIOS) {
-      await applyWorkaroundToOpenSqlite3OnOldAndroidVersions();
-    }
-    
-    return NativeDatabase.createInBackground(file);
-  });
 }
