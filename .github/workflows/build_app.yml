@@ -29,12 +29,11 @@ jobs:
           channel: 'stable'
           cache: true
           
-      - name: Install Dependencies
-        run: |
-          flutter pub get
-          dart run build_runner build --delete-conflicting-outputs || true
+      - name: Get Dependencies
+        run: flutter pub get
         
-      - run: flutter build apk --release --debug
+      - name: Build APK
+        run: flutter build apk --release
         
       - uses: actions/upload-artifact@v4
         with:
@@ -57,15 +56,15 @@ jobs:
           channel: 'stable'
           cache: true
           
-      - name: Install Dependencies
-        run: |
-          flutter pub get
-          dart run build_runner build --delete-conflicting-outputs || true
+      - name: Get Dependencies
+        run: flutter pub get
         
-      - run: pod install
+      - name: Install Pods
+        run: pod install
         working-directory: ios
         
-      - run: flutter build ios --release --no-codesign
+      - name: Build iOS
+        run: flutter build ios --release --no-codesign
 
   # ==================== WEB BUILD ====================
   build-web:
@@ -82,12 +81,11 @@ jobs:
           channel: 'stable'
           cache: true
           
-      - name: Install Dependencies
-        run: |
-          flutter pub get
-          dart run build_runner build --delete-conflicting-outputs || true
+      - name: Get Dependencies
+        run: flutter pub get
         
-      - run: flutter build web --release
+      - name: Build Web
+        run: flutter build web --release
         
       - uses: actions/upload-artifact@v4
         with:
